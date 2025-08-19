@@ -1037,6 +1037,11 @@ Definition argsl C q := (((specs C).2 q).1.1).
 (* Definition argsl C q := NS.elements (((specs C).2 q).1.1). *)
 
 Definition expand (s: PS.t): PNS.t := ⌊' fun ptr pns => (⌊ (fun f pp => PNS.add (ptr, f) pp) ⌋  (getf (gamma (ptr.2))) ▹ pns) '⌋ s ▹ PNS.empty.
+(*----------The "Bootstrapping" Semantics and Footprint Functions For Expressions and Deep Assertions----------*)
+(*We need "bootstrapping" to give semantics to arguments and conditions (tests), 
+which will be used by wlp to establish well-foundedness,
+which will be used to define the "real" semantics*)
+
 
 Fixpoint interpebt (de:exprd) (s:state) : val := 
   match de with 
@@ -1198,7 +1203,7 @@ Program Definition split2' (E1 E2: exeassn) (ss: state) (H: (Conj E1 E2) ss = tr
 Defined.
 Global Notation "E ⨣ s" := (wlpe Object mainb s E) (at level 9, s at level 39).
 
-
+(*----------The Semantics and Footprint Functions For Expressions----------*)
 Equations interpe C p (e: exprd)(s: state) (sp: (wlpe C p s e) s): val by wf ((C, p, s), e) ordere := 
 interpe C p (evar v) s sp := readvar s v;
 interpe C p (eval v) s sp := v;
@@ -1302,7 +1307,7 @@ Import L1.MM.
 
 
 
-
+(*----------The Footprint Function----------*)
 Equations pfragb C p (db: dbexp)(s: state) (sp: (wlpdb C p s db) s): PNS.t by wf ((C, p, s), db) order := 
 pfragb C p (dbc b) s sp := PNS.empty;
 pfragb C p (dbeq e1 e2) s sp := PNS.union (((⥙ e1 ⥕Ε) ( s)))  (((⥙ e2 ⥕Ε) ( s)));
@@ -1356,7 +1361,7 @@ Notation "C - p ⥙ e ⥕Β" := (pfragb C p e) (at level 40).
 Definition Pfragb e := (fun s => (pfragb Object mainb e s (mainfree e s))).
 Global Notation "⥙ e ⥕Β" := (Pfragb e) (at level 40). 
 
- 
+(*----------The Semantics Function for Deep Assertions----------*)
 Equations interpb C p (db:dbexp)(s: state) (sp: wlpdb C p s db s): bool by wf ((C, p, s), db) order := 
 interpb C p (dbc b) s sp  := b;
 interpb C p (dbeq e1 e2) s sp := (veq ((⟦ e1 ⟧Ε) ( s)) ((⟦ e2 ⟧Ε) ( s))) ;
@@ -1482,6 +1487,8 @@ Lemma pexpr_interp: forall s2 xc2 xp2 (e:pureexprd) p2, (⟦ sval e ⟧ϵ) s2 = 
 Admitted.
 
 
+(*----------The Weakening-Substitution Lemmas----------*)
+(*This is a very general lemma family that will be used everywhere else*)
 (*assign/read and nondep*)
 Definition eqxcptS (f g: var -> val) (X: NS.t):=
   forall x, NS.mem x X -> (f x) = (g x).
@@ -1548,8 +1555,6 @@ Lemma exeqhempty: forall (s1 s2: heap) H, PNS.Empty H -> eqxcptH s1 s2 H.
 intros. unfold eqxcptH. intros. apply PNS.mem_2 in H1. apply H0 in H1. contradiction.
 Defined.
 
-(*no requirement for the third component: partial on that, "Wrong", 
-the third component is important to interpert "alloc"*)
 Definition exeqFull (s1 s2:state) (FV: NS.t) (P: PNS.t):=
   eqxcptS s1.1.1 s2.1.1 FV /\ eqxcptH s1.1.2 s2.1.2 P. 
 Definition state_resp_sub xs s2 (sub: synsubst) := forall v e, NM.find v sub = Some e -> readvar xs v = (⟦ sval e ⟧ϵ) s2.
@@ -2306,7 +2311,7 @@ Global Hint Rewrite euop_pdef : esemdb.
 (* Global Hint Rewrite pcall_def : esemdb.
 Global Hint Rewrite pcall_pdef : esemdb. *)
 
-
+(*----------Some Facts about The Two Notions for Disjointness----------*)
 (* Lemma euops_def:  *)
 (* Goal forall s, ⟦ b_ (  (′ this)  … next) `∈(  (′ this)  … repr) ⟧Β s = true.
 intros. autorewrite with esemdb. autounfold with esemdb. simpl. *)
@@ -2530,6 +2535,12 @@ Lemma ninsing: forall (x z:nat), z <> x  -> ~ In (z) [x].
 intros. simpl. intro. destruct H0;try contradiction. rewrite H0 in H. contradiction.
 Defined.
 Lemma nth_next: forall i (x:nat) l d, (nth (S i) (x :: l) d) = nth i l d. simpl. auto. Defined.
+
+
+
+
+
+(*----------Lemmas about Imp and Iff----------*)
 Lemma unfolddb: forall C x neq p (ne1: x<>alloc), ((′ x) @ C ∥ neq ⟼ p ()) ⇒ ((getp (gamma C) p){`empsub[<this ↦ varpexpr x>]`}β).
 Proof.
   intros. 
@@ -2558,6 +2569,7 @@ Proof.
   simpl. ie.  apply veqrefl.
   destruct H0. apply NM.empty_1 in H1. contradiction. *)
 Defined.
+
 Lemma unfoldpfrag: forall C x neq p s (ne1: x<>alloc), (⥙((′ x) @ C ∥ neq ⟼ p ())⥕Β s) ⩶ (⥙((getp (gamma C) p){`empsub[<this ↦ varpexpr x>]`}β)⥕Β s).
   intros. 
   rewrite pcall_pdef. pb. erewrite <- pfragb_weakensub with (xc1:=Object)(xp1:=mainb)(xdsub:=(getp (gamma C) p){`empsub [<this ↦ varpexpr x >] `}β) (xs:=s[{`![(this, (⟦  ′ x  ⟧Ε) s)]!`}]) (p1:= (mainfree (getp (gamma C) p)s[{`![(this, (⟦  ′ x  ⟧Ε) s)]!`}]) );auto.
@@ -2732,11 +2744,6 @@ Lemma scintro: forall P Q1 Q2, P ⟹ Q1 -> P ⟹ Q2 -> Disjoint P Q1 Q2 -> P ⟹
 Admitted.
 
 Lemma scImp1: forall P1 Q1 P2 Q2, P1 ⟹ Q1 -> P2 ⟹ Q2 -> (P1 <*>· P2) ⟹ (Q1 <*>· Q2).
-(* intros. unfold Imp in *.
-intros. pose (H s) as Hs. pose (H0 s) as H0s. apply andb_prop in Hs. destruct Hs. apply andb_prop in H0s. destruct H0s.
-apply andbb. apply impbb. intros. unfold Interpb in H5. rewrite interpb_equation_10 in H5. apply andb_prop in H5. destruct H5. apply andb_prop in H6. destruct H6. 
-assert ((⟦ Q1 ⟧Β) s). eapply impbb1. apply H1. unfold Interpb. erewrite <- interpb_nodepwp. apply H6.
-assert ((⟦ Q2 ⟧Β) s). eapply impbb1. apply H3. unfold Interpb. erewrite <- interpb_nodepwp. apply H7. *)
 Admitted.
 Lemma scImp2: forall P1 P2, (P1 <*>· P2) ⟹ P1.
 Admitted.
@@ -2750,108 +2757,13 @@ Admitted.
 Lemma conjIff2: forall P Q H, P ⇔ Q -> (H </\>· P) ⇔ (H </\>· Q).
 Admitted.
 
-(* Lemma substeqE: forall x f e s E, veq (⟦(′ x) … f⟧Ε s) (⟦ e ⟧Ε s) -> veq (⟦ dsubst1f E x f e ⟧Ε s) (⟦ E ⟧Ε s).
-  induction E; auto; intros.
-  -
-    simpl. apply veqrefl.
-  -
-    destruct E.
-    +
-      simpl. 
-      case_eq (Nat.eq_dec v x);intros. case_eq(Nat.eq_dec f0 f); intros. rewrite e1. rewrite e0.
-      apply veqsym;auto.
-      apply veqrefl. 
-      apply veqrefl.
-    +
-    assert (dsubst1f (  E … f2 … f0) x f e = (dsubst1f ( E … f2) x f e) … f0). auto. rewrite H0.
-    unfold Interpe. rewrite interpe_equation_2. rewrite interpe_equation_2.
-    apply IHE in H. apply veqf. unfold Interpe in H. admit.
-    admit.
-    admit.
-    admit.
-    admit.
-    admit.
-  -
-    simpl. apply veqrefl.
-  -
-    simpl. unfold Interpe. rewrite interpe_equation_4. rewrite interpe_equation_4.
-    apply interpe_weaken. unfold exeqFulle. constructor. 
-    unfold eqxcptS. intros. simpl. case_eq(x0 =? this);intros. admit. (*Ε implies ϵ*) 
-    apply veqrefl.
-    constructor. simpl. apply exeqhrefl. simpl. apply exeqprefl.
-  admit.
-  admit.
-  admit.
-Admitted. *)
-      
-(* Lemma substeq: forall x f e P s, ⟦ (′ x) … f ·=· e <*>· dbsubst1f P x f e ⟧Β s = ⟦(′ x) … f ·=· e <*>· P ⟧Β s.
-Proof.
-  induction P;intros;unfold Interpb in *.
-  -
-    case_eq(interpb Object mainb
-  ((( ( ′ x ) … f) ·=· e) <*>· dbsubst1f (dbc b) x f e) s
-  (mainfree ((( ( ′ x ) … f) ·=· e) <*>· dbsubst1f (dbc b) x f e) s));intros.
-  +
-  rewrite interpb_equation_10 in H;apply andb_prop in H;destruct H;apply andb_prop in H0;destruct H0;rewrite interpb_equation_2 in H0;simpl in H1.
-  
-  rewrite interpb_equation_10. simpl in H. simpl. rewrite H.
-  rewrite interpb_equation_1. rewrite interpb_equation_1 in H1. rewrite H1. rewrite interpb_equation_2. rewrite H0.  auto.
-  +
-  rewrite interpb_equation_10 in H. 
-  (* -
-    
-    rewrite interpb_equation_1. rewrite interpb_equation_1 in H1. auto.
-  -
-    rewrite interpb_equation_2. rewrite interpb_equation_2 in H1.
-    assert (veq (⟦ dsubst1f e0 x f e ⟧Ε s) (⟦ e0 ⟧Ε s)). apply substeqE. auto.
-    assert (veq (⟦ dsubst1f e1 x f e ⟧Ε s) (⟦ e1 ⟧Ε s)). apply substeqE. auto.
-    apply veqtrans with ((⟦ dsubst1f e1 x f e ⟧Ε) s);auto. apply veqtrans with ((⟦ dsubst1f e0 x f e ⟧Ε) s);auto.  apply veqsym. auto.
-  (* - *)
-    (*all relations must respect veq*)
-  admit.
-  admit.
-  admit.
-  admit.
-  -
-    rewrite interpb_equation_7. rewrite interpb_equation_7 in H1.
-    erewrite interpb_weaken. apply H1. unfold exeqFull. constructor. 
-    unfold eqxcptS. intros. simpl. case_eq(x0 =? this);intros. apply veqsym. apply substeqE. auto.
-    apply veqrefl.
-    constructor. simpl. apply exeqhrefl. simpl. apply exeqprefl.
-    auto.
-  -
-    rewrite interpb_equation_8. rewrite interpb_equation_8 in H1. *)
-
-Admitted. *)
-
-(* *)
 Lemma localize: forall x f y P, (((′ y) ·=· ((′ x) … f)) </\>· P) ⟹ (((′ y) ·=· ((′ x) … f)) </\>· dbsubst1f P x f y).
-  (* intros. unfold Imp.
-  intros. apply andbb.
-  apply impbb. intros. rewrite substeq in H. unfold Interpb in *. rewrite interpb_equation_10 in H. apply andb_prop in H. destruct H. apply andb_prop in H0. destruct H0.
-  erewrite interpb_nodepwp. auto. apply H1.
-  (*although subst1f may decrease by remove x.f, but it is included in the equality*)
-  admit.  *)
 Admitted.
 
 (* Lemma substeq2: forall x f e P s, ⟦ e ·=· ((′ x) … f) </\>· dbsubst1f P x f e ⟧Β s = ⟦ e ·=· ((′ x) … f) </\>· P ⟧Β s.
 Admitted.  *)
 Lemma prepare_write: forall x f y P, (forall s, ⟦(((′ y) ·=· ((′ x) … f)) </\>· P)⟧Β s -> (⥙((′ x) … f)⥕Ε s) !! (⥙(dbsubst1f P x f y)⥕Β s)) -> 
 (((′ y) ·=· ((′ x) … f)) </\>· P) ⟹ ((dbacc ((′ x) … f)) <*>· dbsubst1f P x f y). 
-  (* intros. unfold Imp.
-  intros. apply andbb.
-  apply impbb. intros. pose H0 as H00. rewrite <- substeq2 in H00.
-  unfold Interpb in *.
-  apply (H s) in H0 as H0'.
-  rewrite interpb_equation_9 in H0. apply andb_prop in H0. destruct H0.
-  rewrite interpb_equation_10. apply andbb. 
-  unfold pnsdisj. unfold Pfragb. rewrite pfragb_equation_6.
-  unfold pnsdisj in H0'. unfold Pfragb in H0'.  auto.
-  apply andbb. rewrite interpb_equation_6. auto. 
-   
-  rewrite interpb_equation_9 in H00. apply andb_prop in H00. destruct H00.
-  erewrite interpb_nodepwp. auto. apply H3. *)
-  (*subst1f would decrease by remove x.f*)
   admit.
 Admitted.
 
@@ -3053,7 +2965,7 @@ Import L0.M.
 Import L1.MM.
 Import L2.BTH. 
 
-
+(*----------Defining the Final Inperpreter For Commands----------*)
 Definition eqexcept(vs: NS.t) (s s1: stack):= (forall x, ~ NS.In x vs -> s x = s1 x).
 Global Hint Rewrite reduce_union : folddb.
 Global Hint Rewrite reduce_empty : folddb.
