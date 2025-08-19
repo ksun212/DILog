@@ -1,0 +1,8 @@
+# .coqproject file for your Coq project
+
+# Optionally, set the current directory as a module root with a chosen prefix.
+# Uncomment and edit the following line if you want to use a module prefix.
+-R . ILog
+
+JavaHoareIDFAllDeepHoareFramedExplicit.v
+
